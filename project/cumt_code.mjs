@@ -637,7 +637,7 @@ async function ensureManagedSlashCommands() {
       name: 'cumt-profiles.md',
       content: `---
 description: 查看当前可用的 CUMT 配置
-allowed-tools: Exec(node)
+allowed-tools: Bash(node:*)
 ---
 
 执行下面的命令，并把结果直接展示给用户：
@@ -651,7 +651,7 @@ node ${shellQuote(SELF_SCRIPT_PATH)} config profiles
       name: 'cumt-use.md',
       content: `---
 description: 切换当前 CUMT 配置 profile，下一条消息立即生效
-allowed-tools: Exec(node)
+allowed-tools: Bash(node:*)
 argument-hint: <profile>
 ---
 
@@ -674,7 +674,7 @@ node ${shellQuote(SELF_SCRIPT_PATH)} config use "$ARGUMENTS"
       name: 'cumt-model.md',
       content: `---
 description: 切换当前 profile 的模型，下一条消息立即生效
-allowed-tools: Exec(node)
+allowed-tools: Bash(node:*)
 argument-hint: <model>
 ---
 
@@ -693,7 +693,7 @@ node ${shellQuote(SELF_SCRIPT_PATH)} config set-model "$ARGUMENTS"
       name: 'cumt-preset.md',
       content: `---
 description: 把当前 profile 切换到指定 provider 预设，下一条消息立即生效
-allowed-tools: Exec(node)
+allowed-tools: Bash(node:*)
 argument-hint: <preset>
 ---
 
@@ -3223,6 +3223,7 @@ function buildRuntimeChildEnv(port) {
   const config = getRuntimeConfig();
   return {
     ...process.env,
+    USE_BUILTIN_RIPGREP: process.env.USE_BUILTIN_RIPGREP || '0',
     ANTHROPIC_API_KEY: MANAGED_RUNTIME_API_KEY,
     ANTHROPIC_BASE_URL: `http://${DEFAULT_PROXY_HOST}:${port}`,
     ANTHROPIC_MODEL: config.compatModel,
@@ -3300,6 +3301,7 @@ async function runRuntimePassthrough(forwardArgs) {
       stdio: 'inherit',
       env: {
         ...process.env,
+        USE_BUILTIN_RIPGREP: process.env.USE_BUILTIN_RIPGREP || '0',
       },
     });
 

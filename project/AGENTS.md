@@ -61,3 +61,5 @@
 - 新增安装后可直接使用的交互式配置入口：支持 `cumt setup`，并且在首次安装、尚无 `~/.cumt` 配置时，直接执行 `cumt` 会自动进入配置向导，体验上更接近 zcf。
 - README 现已插入仓库内总览图 `figures/overview.png`，并同步把该图片加入 npm 发布白名单，保证发布后的 README 图片链接不失效。
 - README 首页表述已更新为“中国矿业大学的开源 CUMT Code Agent”，并明确项目定位是一个支持多种 provider 和多种 API 接入形式的编码 Agent；同时新增 `figures/setup.png` 的相对路径展示，并将该图片加入 npm 发布白名单。
+- 修复运行时自定义命令整体失效的问题：当前环境下 `@anthropic-ai/claude-code` 自带的 vendor `ripgrep` 二进制缺少执行权限，导致 `~/.cumt/runtime/commands` 无法被扫描；现已由宿主在启动子进程时默认注入 `USE_BUILTIN_RIPGREP=0`，强制切到系统 `rg`。
+- 同步修正 `/cumt-profiles`、`/cumt-use`、`/cumt-model`、`/cumt-preset` 生成模板的 `allowed-tools`，从无效的 `Exec(node)` 改为可实际放行的 `Bash(node ...)` 规则，避免命令加载后仍无法执行。
