@@ -1,7 +1,13 @@
-# CUMT Code
+![CUMT Code Hero](figures/Hero.png)
 
-![Node.js](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-blue)
+<div align="center">
+  <h1>CUMT Code</h1>
+  <p>矿大的开源终端 Code Agent，支持多个 provider、多个 API 接入形式，以及会话内热切换。</p>
+  <p>
+    <img alt="Node.js" src="https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white" />
+    <img alt="License" src="https://img.shields.io/badge/license-MIT-blue" />
+  </p>
+</div>
 
 CUMT Code 是一个中国矿业大学的开源终端 Code Agent。它在独立的 `~/.cumt` 用户目录中管理配置与密钥，提供本地 API 网关、多 profile 配置、会话内热切换 provider/model，以及面向国内外多种上游接口的兼容层。
 

@@ -63,3 +63,4 @@
 - README 首页表述已更新为“中国矿业大学的开源 CUMT Code Agent”，并明确项目定位是一个支持多种 provider 和多种 API 接入形式的编码 Agent；同时新增 `figures/setup.png` 的相对路径展示，并将该图片加入 npm 发布白名单。
 - 修复运行时自定义命令整体失效的问题：当前环境下 `@anthropic-ai/claude-code` 自带的 vendor `ripgrep` 二进制缺少执行权限，导致 `~/.cumt/runtime/commands` 无法被扫描；现已由宿主在启动子进程时默认注入 `USE_BUILTIN_RIPGREP=0`，强制切到系统 `rg`。
 - 同步修正 `/cumt-profiles`、`/cumt-use`、`/cumt-model`、`/cumt-preset` 生成模板的 `allowed-tools`，从无效的 `Exec(node)` 改为可实际放行的 `Bash(node ...)` 规则，避免命令加载后仍无法执行。
+- README 顶部已改为 hero 区布局：最上方使用 `figures/Hero.png` 作为封面图，并补充居中标题、项目定位和 badges；同时把 `figures/Hero.png` 加入 npm 发布白名单，避免发布后顶部图片丢失。
