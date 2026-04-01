@@ -60,3 +60,4 @@
 - 继续收口用户可见旧品牌残留：`--help` 中残留的 `ylscode` 和 `Claude` 提示已补充二次替换规则，当前帮助输出已不再出现这些旧词。
 - 新增安装后可直接使用的交互式配置入口：支持 `cumt setup`，并且在首次安装、尚无 `~/.cumt` 配置时，直接执行 `cumt` 会自动进入配置向导，体验上更接近 zcf。
 - README 现已插入仓库内总览图 `figures/overview.png`，并同步把该图片加入 npm 发布白名单，保证发布后的 README 图片链接不失效。
+- README 首页表述已更新为“中国矿业大学的开源 CUMT Code Agent”，并明确项目定位是一个支持多种 provider 和多种 API 接入形式的编码 Agent；同时新增 `figures/setup.png` 的相对路径展示，并将该图片加入 npm 发布白名单。

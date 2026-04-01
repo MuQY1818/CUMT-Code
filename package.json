@@ -21,7 +21,8 @@
     "project/cumt_code.mjs",
     "CONTRIBUTING.md",
     "LICENSE",
-    "figures/overview.png"
+    "figures/overview.png",
+    "figures/setup.png"
   ],
   "engines": {
     "node": ">=18.0.0"
