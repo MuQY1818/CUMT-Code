@@ -1,0 +1,9 @@
+node_modules/
+.tmp/
+npm-debug.log*
+.serena/
+.spec-workflow/
+*.tgz
+.DS_Store
+.env
+.env.*

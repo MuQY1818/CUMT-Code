@@ -1,0 +1,47 @@
+{
+  "name": "cumt-code",
+  "version": "0.0.0-local",
+  "private": false,
+  "type": "module",
+  "description": "CUMT Code CLI with hot-swappable provider profiles and local API gateway.",
+  "license": "MIT",
+  "keywords": [
+    "cumt",
+    "cumt-code",
+    "cli",
+    "codex",
+    "openai",
+    "anthropic"
+  ],
+  "bin": {
+    "cumt": "./project/cumt_code.mjs",
+    "cumt-code": "./project/cumt_code.mjs"
+  },
+  "files": [
+    "project/cumt_code.mjs",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "figures/overview.png"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "auth:status": "node project/cumt_code.mjs auth status",
+    "config": "node project/cumt_code.mjs config",
+    "config:init": "node project/cumt_code.mjs config init",
+    "config:show": "node project/cumt_code.mjs config show",
+    "config:profiles": "node project/cumt_code.mjs config profiles",
+    "config:presets": "node project/cumt_code.mjs config presets",
+    "config:test": "node project/cumt_code.mjs config test",
+    "cumt": "node project/cumt_code.mjs",
+    "proxy": "node project/cumt_code.mjs --proxy-only",
+    "setup": "node project/cumt_code.mjs setup",
+    "start": "node project/cumt_code.mjs",
+    "help": "node project/cumt_code.mjs --help",
+    "version": "node project/cumt_code.mjs --version"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.89"
+  }
+}
