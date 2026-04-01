@@ -2,8 +2,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { constants as fsConstants, existsSync } from 'node:fs';
+import { access, chmod, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
@@ -277,6 +277,8 @@ const DEFAULT_RUNTIME_BRAND_REPLACEMENTS = [
     'Tip: You can launch CUMT Code with just `claude`',
     'Tip: You can launch CUMT Code with just `cumt`',
   ],
+  ['claude --resume', 'cumt --resume'],
+  ['claude --continue', 'cumt --continue'],
   [
     'Model for the current session. Provide an alias for the latest model (e.g. \'sonnet\' or \'opus\') or a model\'s full name (e.g. \'claude-sonnet-4-6\').',
     'Model for the current session. Use the current profile model name, for example \'gpt-5.4\'.',
@@ -3219,11 +3221,49 @@ async function startProxyServer(preferredPort) {
   );
 }
 
-function buildRuntimeChildEnv(port) {
-  const config = getRuntimeConfig();
-  return {
+function getBundledRipgrepPath() {
+  return join(
+    PACKAGE_ROOT,
+    'node_modules',
+    '@anthropic-ai',
+    'claude-code',
+    'vendor',
+    'ripgrep',
+    `${process.arch}-${process.platform}`,
+    process.platform === 'win32' ? 'rg.exe' : 'rg',
+  );
+}
+
+async function buildRuntimeBaseEnv() {
+  const nextEnv = {
     ...process.env,
-    USE_BUILTIN_RIPGREP: process.env.USE_BUILTIN_RIPGREP || '0',
+  };
+
+  const bundledRipgrepPath = getBundledRipgrepPath();
+  if (!existsSync(bundledRipgrepPath) || process.platform === 'win32') {
+    return nextEnv;
+  }
+
+  try {
+    await access(bundledRipgrepPath, fsConstants.X_OK);
+    return nextEnv;
+  } catch {
+    try {
+      await chmod(bundledRipgrepPath, 0o755);
+      await access(bundledRipgrepPath, fsConstants.X_OK);
+      return nextEnv;
+    } catch {
+      nextEnv.CLAUDE_CODE_USE_NATIVE_FILE_SEARCH = '1';
+      return nextEnv;
+    }
+  }
+}
+
+async function buildRuntimeChildEnv(port) {
+  const config = getRuntimeConfig();
+  const runtimeEnv = await buildRuntimeBaseEnv();
+  return {
+    ...runtimeEnv,
     ANTHROPIC_API_KEY: MANAGED_RUNTIME_API_KEY,
     ANTHROPIC_BASE_URL: `http://${DEFAULT_PROXY_HOST}:${port}`,
     ANTHROPIC_MODEL: config.compatModel,
@@ -3295,14 +3335,12 @@ async function printVersion() {
 async function runRuntimePassthrough(forwardArgs) {
   const runtimeLaunchSpec = getRuntimeLaunchSpec(forwardArgs);
   await applyRuntimeBrandPatchIfNeeded();
+  const runtimeEnv = await buildRuntimeBaseEnv();
 
   await new Promise((resolve, reject) => {
     const child = spawn(runtimeLaunchSpec.command, runtimeLaunchSpec.args, {
       stdio: 'inherit',
-      env: {
-        ...process.env,
-        USE_BUILTIN_RIPGREP: process.env.USE_BUILTIN_RIPGREP || '0',
-      },
+      env: runtimeEnv,
     });
 
     child.once('error', reject);
@@ -3320,12 +3358,13 @@ async function runCumtViaProxy(forwardArgs) {
   await ensureManagedApiKeyApproval();
   await applyRuntimeBrandPatchIfNeeded();
   const { server, port } = await startProxyServer(DEFAULT_PROXY_PORT);
+  const runtimeEnv = await buildRuntimeChildEnv(port);
   if (shouldRenderBanner(forwardArgs)) {
     process.stderr.write(`${renderBrandBanner(port)}\n`);
   }
   const child = spawn(runtimeLaunchSpec.command, runtimeLaunchSpec.args, {
     stdio: 'inherit',
-    env: buildRuntimeChildEnv(port),
+    env: runtimeEnv,
   });
 
   const shutdown = () => {

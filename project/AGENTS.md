@@ -64,3 +64,5 @@
 - 修复运行时自定义命令整体失效的问题：当前环境下 `@anthropic-ai/claude-code` 自带的 vendor `ripgrep` 二进制缺少执行权限，导致 `~/.cumt/runtime/commands` 无法被扫描；现已由宿主在启动子进程时默认注入 `USE_BUILTIN_RIPGREP=0`，强制切到系统 `rg`。
 - 同步修正 `/cumt-profiles`、`/cumt-use`、`/cumt-model`、`/cumt-preset` 生成模板的 `allowed-tools`，从无效的 `Exec(node)` 改为可实际放行的 `Bash(node ...)` 规则，避免命令加载后仍无法执行。
 - README 顶部已改为 hero 区布局：最上方使用 `figures/Hero.png` 作为封面图，并补充居中标题、项目定位和 badges；同时把 `figures/Hero.png` 加入 npm 发布白名单，避免发布后顶部图片丢失。
+- 继续收口运行时残留旧品牌提示：补充把会话结束后的 `claude --resume`、`claude --continue` 文案替换为 `cumt --resume`、`cumt --continue`，避免用户被旧提示误导。
+- 修正 slash command 依赖系统 `rg` 的问题：不再强制注入 `USE_BUILTIN_RIPGREP=0`。宿主启动前会先检查并修复 bundled `ripgrep` 的执行权限；如果仍不可执行，则自动切到 `CLAUDE_CODE_USE_NATIVE_FILE_SEARCH=1`，保证 `~/.cumt/runtime/commands` 在没有系统 `rg` 的终端里也能被加载。
