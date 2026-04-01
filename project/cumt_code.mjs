@@ -65,6 +65,15 @@ const CUMT_RUNTIME_CONFIG_DIR = join(CUMT_CONFIG_HOME, 'runtime');
 const BRAND_SLOGAN = '自主研发，遥遥领先';
 const DEFAULT_WELCOME_PROMPT =
   `Use ${AGENT_NAME} to scaffold a new project or clone a repository`;
+const MANAGED_LEGACY_COMMAND_FILES = Object.freeze([
+  'cumt-profiles.md',
+  'cumt-use.md',
+  'cumt-model.md',
+  'cumt-preset.md',
+]);
+const RUNTIME_BUILTIN_COMMAND_PATCH_MARKER =
+  'CUMT_BUILTIN_COMMANDS_PATCH_V1';
+const RUNTIME_BUILTIN_COMMAND_ARRAY_NEEDLE = 'v_7=$1(()=>[hvK,LmK,';
 const DEFAULT_RUNTIME_CONFIG = Object.freeze({
   provider: 'default',
   baseUrl:
@@ -614,8 +623,6 @@ async function initializeRuntimeHome(force = false) {
       hasCompletedOnboarding: true,
     });
   }
-
-  await ensureManagedSlashCommands();
 }
 
 function getPresetSummaries() {
@@ -630,96 +637,19 @@ function getPresetSummaries() {
   }));
 }
 
-async function ensureManagedSlashCommands() {
+async function cleanupLegacySlashCommands() {
   const commandsDir = join(CUMT_RUNTIME_CONFIG_DIR, 'commands');
   await mkdir(commandsDir, { recursive: true });
-
-  const commandFiles = [
-    {
-      name: 'cumt-profiles.md',
-      content: `---
-description: 查看当前可用的 CUMT 配置
-allowed-tools: Bash(node:*)
----
-
-执行下面的命令，并把结果直接展示给用户：
-
-\`\`\`bash
-node ${shellQuote(SELF_SCRIPT_PATH)} config profiles
-\`\`\`
-`,
-    },
-    {
-      name: 'cumt-use.md',
-      content: `---
-description: 切换当前 CUMT 配置 profile，下一条消息立即生效
-allowed-tools: Bash(node:*)
-argument-hint: <profile>
----
-
-如果没有传入参数，先执行下面的命令并把结果展示给用户：
-
-\`\`\`bash
-node ${shellQuote(SELF_SCRIPT_PATH)} config profiles
-\`\`\`
-
-如果有参数，则执行下面的命令：
-
-\`\`\`bash
-node ${shellQuote(SELF_SCRIPT_PATH)} config use "$ARGUMENTS"
-\`\`\`
-
-执行完成后，明确告诉用户：切换已经生效，无需重启 CUMT Code，下一条消息开始使用新配置。
-`,
-    },
-    {
-      name: 'cumt-model.md',
-      content: `---
-description: 切换当前 profile 的模型，下一条消息立即生效
-allowed-tools: Bash(node:*)
-argument-hint: <model>
----
-
-如果没有传入参数，提示用户使用格式 \`/cumt-model <model>\`。
-
-如果有参数，则执行下面的命令：
-
-\`\`\`bash
-node ${shellQuote(SELF_SCRIPT_PATH)} config set-model "$ARGUMENTS"
-\`\`\`
-
-执行完成后，明确告诉用户：模型已经热切换成功，无需重启 CUMT Code。
-`,
-    },
-    {
-      name: 'cumt-preset.md',
-      content: `---
-description: 把当前 profile 切换到指定 provider 预设，下一条消息立即生效
-allowed-tools: Bash(node:*)
-argument-hint: <preset>
----
-
-如果没有传入参数，先执行下面的命令并把结果展示给用户：
-
-\`\`\`bash
-node ${shellQuote(SELF_SCRIPT_PATH)} config presets
-\`\`\`
-
-如果有参数，则执行下面的命令：
-
-\`\`\`bash
-node ${shellQuote(SELF_SCRIPT_PATH)} config apply-preset "$ARGUMENTS"
-\`\`\`
-
-执行完成后，明确告诉用户：provider 已经热切换成功，无需重启 CUMT Code。
-`,
-    },
-  ];
-
   await Promise.all(
-    commandFiles.map(commandFile =>
-      writeFile(join(commandsDir, commandFile.name), `${commandFile.content.trim()}\n`, 'utf8'),
-    ),
+    MANAGED_LEGACY_COMMAND_FILES.map(async commandFileName => {
+      try {
+        await rm(join(commandsDir, commandFileName));
+      } catch (error) {
+        if (error?.code !== 'ENOENT') {
+          throw error;
+        }
+      }
+    }),
   );
 }
 
@@ -730,17 +660,8 @@ function resolveRequestedModel(requestedModel, fallbackModel = getRuntimeConfig(
   return fallbackModel;
 }
 
-function resolveAnthropicUpstreamModel(requestedModel) {
-  const config = getRuntimeConfig();
-  if (
-    typeof requestedModel === 'string' &&
-    requestedModel.trim().length > 0 &&
-    requestedModel.trim() !== config.compatModel &&
-    requestedModel.trim() !== config.model
-  ) {
-    return requestedModel.trim();
-  }
-  return config.model;
+function resolveAnthropicUpstreamModel(_requestedModel) {
+  return getRuntimeConfig().model;
 }
 
 function applyOpenAIDefaults(upstreamBody, { defaultStream = false } = {}) {
@@ -1390,6 +1311,16 @@ async function runSetupWizard() {
   await runConfigWizard();
 }
 
+function resolveApiKeyFromScopedAuth(scopedAuth, envKey) {
+  if (!scopedAuth || typeof scopedAuth !== 'object') {
+    return null;
+  }
+  if (typeof scopedAuth[envKey] === 'string' && scopedAuth[envKey]) {
+    return scopedAuth[envKey];
+  }
+  return null;
+}
+
 async function resolveApiKey(profileName = getRuntimeProfileName()) {
   await loadRuntimeConfigIfNeeded();
   await migrateLegacyCumtHomeIfNeeded();
@@ -1401,25 +1332,13 @@ async function resolveApiKey(profileName = getRuntimeProfileName()) {
   if (typeof process.env[envKey] === 'string' && process.env[envKey]) {
     return process.env[envKey];
   }
-  if (envKey !== 'OPENAI_API_KEY' && process.env.OPENAI_API_KEY) {
-    return process.env.OPENAI_API_KEY;
-  }
 
   const authStore = await loadRuntimeAuthStore();
   for (const scopedProfileName of [normalizedProfileName, 'default']) {
     const scopedAuth = authStore.profiles?.[scopedProfileName];
-    if (!scopedAuth || typeof scopedAuth !== 'object') {
-      continue;
-    }
-    if (typeof scopedAuth[envKey] === 'string' && scopedAuth[envKey]) {
-      return scopedAuth[envKey];
-    }
-    if (
-      envKey !== 'OPENAI_API_KEY' &&
-      typeof scopedAuth.OPENAI_API_KEY === 'string' &&
-      scopedAuth.OPENAI_API_KEY
-    ) {
-      return scopedAuth.OPENAI_API_KEY;
+    const scopedApiKey = resolveApiKeyFromScopedAuth(scopedAuth, envKey);
+    if (scopedApiKey) {
+      return scopedApiKey;
     }
   }
 
@@ -1430,14 +1349,34 @@ async function resolveApiKey(profileName = getRuntimeProfileName()) {
       if (typeof parsed[envKey] === 'string' && parsed[envKey]) {
         return parsed[envKey];
       }
-      if (
-        envKey !== 'OPENAI_API_KEY' &&
-        typeof parsed.OPENAI_API_KEY === 'string' &&
-        parsed.OPENAI_API_KEY
-      ) {
-        return parsed.OPENAI_API_KEY;
-      }
     } catch {}
+  }
+
+  if (envKey !== 'OPENAI_API_KEY' && process.env.OPENAI_API_KEY) {
+    return process.env.OPENAI_API_KEY;
+  }
+
+  if (envKey !== 'OPENAI_API_KEY') {
+    for (const scopedProfileName of [normalizedProfileName, 'default']) {
+      const scopedAuth = authStore.profiles?.[scopedProfileName];
+      const fallbackOpenAIKey = resolveApiKeyFromScopedAuth(
+        scopedAuth,
+        'OPENAI_API_KEY',
+      );
+      if (fallbackOpenAIKey) {
+        return fallbackOpenAIKey;
+      }
+    }
+
+    for (const authPath of [join(homedir(), '.codex', 'auth.json')]) {
+      try {
+        const raw = await readFile(authPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.OPENAI_API_KEY === 'string' && parsed.OPENAI_API_KEY) {
+          return parsed.OPENAI_API_KEY;
+        }
+      } catch {}
+    }
   }
 
   return null;
@@ -1799,10 +1738,45 @@ function getRuntimeLaunchSpec(forwardArgs = []) {
   };
 }
 
+function buildRuntimeBuiltinCommandPatch() {
+  const scriptPathLiteral = JSON.stringify(SELF_SCRIPT_PATH);
+  return `/* ${RUNTIME_BUILTIN_COMMAND_PATCH_MARKER} */
+globalThis.cumtBuiltinCommandRunner=async function(q,K){let {execFileSync:_}=await import("node:child_process");try{let z=_(process.execPath,[${scriptPathLiteral},...q],{encoding:"utf8",stdio:["ignore","pipe","pipe"],env:process.env,maxBuffer:1048576});let Y=typeof z==="string"?z:String(z??"");return{type:"text",value:Y.trim()||K};}catch(z){let Y=[z?.stdout,z?.stderr,z?.message].filter(($)=>typeof $==="string"&&$.trim().length>0).join("\\n").trim();throw Error(Y||"CUMT built-in command failed");}},
+globalThis.cumtProfilesBuiltinCommand={type:"local",name:"cumt-profiles",supportsNonInteractive:!0,description:"查看当前可用的 CUMT 配置",load:()=>Promise.resolve({call:()=>globalThis.cumtBuiltinCommandRunner(["config","profiles"],"暂无配置")})},
+globalThis.cumtUseBuiltinCommand={type:"local",name:"cumt-use",supportsNonInteractive:!0,description:"切换当前 CUMT 配置 profile，下一条消息立即生效",argumentHint:"<profile>",load:()=>Promise.resolve({call:(q)=>{let K=q?.trim();if(!K)return{type:"text",value:"Usage: /cumt-use <profile>"};return globalThis.cumtBuiltinCommandRunner(["config","use",K],"切换已完成");}})},
+globalThis.cumtModelBuiltinCommand={type:"local",name:"cumt-model",supportsNonInteractive:!0,description:"切换当前 profile 的模型，下一条消息立即生效",argumentHint:"<model>",load:()=>Promise.resolve({call:(q)=>{let K=q?.trim();if(!K)return{type:"text",value:"Usage: /cumt-model <model>"};return globalThis.cumtBuiltinCommandRunner(["config","set-model",K],"模型已更新");}})},
+globalThis.cumtPresetBuiltinCommand={type:"local",name:"cumt-preset",supportsNonInteractive:!0,description:"把当前 profile 切换到指定 provider 预设，下一条消息立即生效",argumentHint:"<preset>",load:()=>Promise.resolve({call:(q)=>{let K=q?.trim();if(!K)return globalThis.cumtBuiltinCommandRunner(["config","presets"],"暂无预设");return globalThis.cumtBuiltinCommandRunner(["config","apply-preset",K],"预设已应用");}})},
+`;
+}
+
+function applyRuntimeBuiltinCommandPatch(runtimeSource) {
+  const patchedPrefix =
+    `${buildRuntimeBuiltinCommandPatch()}v_7=$1(()=>[globalThis.cumtProfilesBuiltinCommand,` +
+    'globalThis.cumtUseBuiltinCommand,globalThis.cumtModelBuiltinCommand,' +
+    'globalThis.cumtPresetBuiltinCommand,hvK,LmK,';
+  const patchedPattern = new RegExp(
+    `/\\* ${RUNTIME_BUILTIN_COMMAND_PATCH_MARKER} \\*/[\\s\\S]*?` +
+      'v_7=\\$1\\(\\(\\)=>\\[[\\s\\S]*?hvK,LmK,',
+  );
+
+  if (runtimeSource.includes(RUNTIME_BUILTIN_COMMAND_PATCH_MARKER)) {
+    return runtimeSource.replace(patchedPattern, patchedPrefix);
+  }
+
+  if (!runtimeSource.includes(RUNTIME_BUILTIN_COMMAND_ARRAY_NEEDLE)) {
+    return runtimeSource;
+  }
+
+  return runtimeSource.replace(
+    RUNTIME_BUILTIN_COMMAND_ARRAY_NEEDLE,
+    patchedPrefix,
+  );
+}
+
 async function applyRuntimeBrandPatchIfNeeded() {
   const runtimeCliPath = getRuntimeCliScriptPath();
   if (!existsSync(runtimeCliPath)) {
-    return;
+    return false;
   }
 
   const rawRuntime = await readFile(runtimeCliPath, 'utf8');
@@ -1812,11 +1786,17 @@ async function applyRuntimeBrandPatchIfNeeded() {
     patchedRuntime = patchedRuntime.replaceAll(needle, replacement);
   }
 
+  patchedRuntime = applyRuntimeBuiltinCommandPatch(patchedRuntime);
+  const hasBuiltinCumtCommands = patchedRuntime.includes(
+    RUNTIME_BUILTIN_COMMAND_PATCH_MARKER,
+  );
+
   if (patchedRuntime === rawRuntime) {
-    return;
+    return hasBuiltinCumtCommands;
   }
 
   await writeFile(runtimeCliPath, patchedRuntime, 'utf8');
+  return hasBuiltinCumtCommands;
 }
 
 function systemToString(system) {
@@ -2543,7 +2523,7 @@ function buildAnthropicMessage(anthropicBody, completedResponse) {
     id: completedResponse.id || `msg_${randomUUID()}`,
     type: 'message',
     role: 'assistant',
-    model: anthropicBody.model || completedResponse.model || config.model,
+    model: completedResponse.model || config.model,
     content,
     stop_reason: content.some(block => block.type === 'tool_use')
       ? 'tool_use'
@@ -3334,7 +3314,10 @@ async function printVersion() {
 
 async function runRuntimePassthrough(forwardArgs) {
   const runtimeLaunchSpec = getRuntimeLaunchSpec(forwardArgs);
-  await applyRuntimeBrandPatchIfNeeded();
+  const hasBuiltinCumtCommands = await applyRuntimeBrandPatchIfNeeded();
+  if (hasBuiltinCumtCommands) {
+    await cleanupLegacySlashCommands();
+  }
   const runtimeEnv = await buildRuntimeBaseEnv();
 
   await new Promise((resolve, reject) => {
@@ -3356,7 +3339,10 @@ async function runCumtViaProxy(forwardArgs) {
   const managedArgs = await buildManagedRuntimeArgs(forwardArgs);
   const runtimeLaunchSpec = getRuntimeLaunchSpec(managedArgs);
   await ensureManagedApiKeyApproval();
-  await applyRuntimeBrandPatchIfNeeded();
+  const hasBuiltinCumtCommands = await applyRuntimeBrandPatchIfNeeded();
+  if (hasBuiltinCumtCommands) {
+    await cleanupLegacySlashCommands();
+  }
   const { server, port } = await startProxyServer(DEFAULT_PROXY_PORT);
   const runtimeEnv = await buildRuntimeChildEnv(port);
   if (shouldRenderBanner(forwardArgs)) {

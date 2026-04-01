@@ -66,3 +66,9 @@
 - README 顶部已改为 hero 区布局：最上方使用 `figures/Hero.png` 作为封面图，并补充居中标题、项目定位和 badges；同时把 `figures/Hero.png` 加入 npm 发布白名单，避免发布后顶部图片丢失。
 - 继续收口运行时残留旧品牌提示：补充把会话结束后的 `claude --resume`、`claude --continue` 文案替换为 `cumt --resume`、`cumt --continue`，避免用户被旧提示误导。
 - 修正 slash command 依赖系统 `rg` 的问题：不再强制注入 `USE_BUILTIN_RIPGREP=0`。宿主启动前会先检查并修复 bundled `ripgrep` 的执行权限；如果仍不可执行，则自动切到 `CLAUDE_CODE_USE_NATIVE_FILE_SEARCH=1`，保证 `~/.cumt/runtime/commands` 在没有系统 `rg` 的终端里也能被加载。
+- 继续修复会话内热插拔：Anthropic 兼容链路不再信任运行时请求体里缓存的旧 `model`，上游请求始终以当前 `~/.cumt/config.json` 激活 profile 的模型为准。
+- `resolveApiKey()` 的优先级已调整为“当前 profile 对应 `envKey` 的环境变量/`~/.cumt/auth.json`/`~/.codex/auth.json`”优先，只有都不存在时才回退 `OPENAI_API_KEY`，避免切换到 GLM、Kimi、方舟等 provider 后仍误用旧 OpenAI 密钥。
+- Anthropic 兼容响应体现在回显 `completedResponse.model || 当前配置模型`，不再把请求体中的旧模型名透传回客户端，因此 `/cumt-use`、`/cumt-model`、`/cumt-preset` 切换后，下一条消息的响应模型显示会与实际生效模型保持一致。
+- `/cumt-profiles`、`/cumt-use`、`/cumt-model`、`/cumt-preset` 已从 `~/.cumt/runtime/commands/*.md` 外部命令改为 runtime 内置 `local` slash commands，不再依赖 skills/legacy commands 扫描链路，因此即使 runtime 报 `legacy commands: 0` 也可直接使用。
+- 宿主启动 runtime 前会自动清理 `~/.cumt/runtime/commands/` 下旧的 `cumt-*.md` 托管命令文件，避免外部同名命令在命令解析顺序上覆盖新的内置命令实现。
+- 已完成两组本地黑盒验证：1) 临时 `HOME` 下 `/cumt-profiles` 可直接返回配置列表且旧 `cumt-profiles.md` 会被清理；2) Anthropic 兼容请求在切换 provider/model/envKey 后，下一条请求的上游地址、Authorization、真实模型和代理响应体 `model` 字段都会一起热切换。
